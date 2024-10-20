@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  "crates/fire_alarm",
+  "crates/server",
+  "crates/gauge"
+, "crates/temperature_gauge"]

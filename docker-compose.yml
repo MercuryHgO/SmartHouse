@@ -1,0 +1,46 @@
+version: '3'
+
+services:
+  server:
+    build: 
+      context: ./.
+      dockerfile: crates/server/Dockerfile
+      args:
+        ADRESS: "172.18.0.2"
+        PORT: "7979"
+    networks:
+      local:
+        ipv4_address: 172.18.0.2
+
+  fire_alarm:
+    build: 
+      context: ./.
+      dockerfile: crates/fire_alarm/Dockerfile
+      args:
+        GAUGE_NAME: "Living room alarm"
+        SERVER_ADRESS: "172.18.0.2:7979"
+    networks:
+      local:
+        ipv4_address: 172.18.0.3
+    stdin_open: true
+    tty: true
+    
+  temperature_gauge:
+    build: 
+      context: ./.
+      dockerfile: crates/temperature_gauge/Dockerfile
+      args:
+        GAUGE_NAME: "Living room temperature"
+        SERVER_ADRESS: "172.18.0.2:7979"
+    networks:
+      local:
+        ipv4_address: 172.18.0.4
+    stdin_open: true
+    tty: true
+
+networks:
+  local: 
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
