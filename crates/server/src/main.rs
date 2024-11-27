@@ -1,18 +1,27 @@
 use std::net::{TcpListener, TcpStream};
-use std::io::{Read,Write};
+use std::io::Read;
 
-use gauge::DeserializedGauge;
+use gauge::helpers::read_gauge_by_id;
+use gauge::types::{SerializedGauge, DeserializedGauge};
 
 fn read_gauge(gauge: DeserializedGauge) {
-    match gauge.state() {
-        gauge::GaugeState::Disabled => {
-            println!("Gauge \"{}\" disabled",gauge.name());
+    match read_gauge_by_id(gauge) {
+        Ok(reader_gauge) => {
+            match reader_gauge {
+                gauge::helpers::Gauges::FireAlarm(fire_alarm) => {
+                    println!("{}",fire_alarm);
+                },
+                gauge::helpers::Gauges::Unknown(deserialized_gauge) => {
+                    println!("Parsed gauge with unknown id, trying to read...");
+                    println!("{}",deserialized_gauge);
+                },
+                gauge::helpers::Gauges::TemperatureGauge(temperature_gauge) => {
+                    println!("{temperature_gauge}")
+                },
+            };
         },
-        gauge::GaugeState::Enabled => {
-            println!("Gauge \"{}\" enabled",gauge.name());
-        },
-        gauge::GaugeState::Message(m) => {
-            println!("Gauge \"{}\" sent message: {}", gauge.name(),m)
+        Err(e) => {
+            eprintln!("Error reading gauge id: {e}")
         },
     }
 }
@@ -21,10 +30,11 @@ fn handle_client(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
 
     while match stream.read(&mut buffer) {
-        Ok(size) if size > 0=> {
-            let recieved_gauge = gauge::deserialize(&buffer);
-
-            match recieved_gauge {
+        Ok(size) if size > 0 => {
+            let recieved_gauge = SerializedGauge::from(buffer.to_vec());
+            let deserialized_gauge = DeserializedGauge::parse(recieved_gauge);
+            
+            match deserialized_gauge {
                 Ok(gauge) => {read_gauge(gauge)},
                 Err(e) => {
                     eprintln!("Error decoding gauge: {e}")

@@ -1,3 +1,6 @@
+[profile.dev]
+debug = 2
+
 [package]
 name = "gauge"
 version = "0.1.0"

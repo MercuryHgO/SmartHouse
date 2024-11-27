@@ -29,7 +29,7 @@
         };
 
         devShell = (rustPkgs.workspaceShell {
-          packages = with pkgs; [ rust-analyzer ];
+          packages = with pkgs; [ gdb rust-analyzer ];
           shellHook = ''
             tmux new-session -d -t smarthouse-project-shell
 

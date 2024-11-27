@@ -1,48 +1,48 @@
 use std::{net::TcpStream, io::Write};
 
-use gauge::{Gauge, GaugeState, IsUpdated};
+use gauge::types::{fire_alarm::{FireAlarm, FireAlarmState}, Gauge};
 
-#[derive(Debug)]
-struct FireAlarm {
-    name: String,
-    updated: bool,
-    state: GaugeState
-}
+// #[derive(Debug)]
+// struct FireAlarm {
+//     name: String,
+//     updated: bool,
+//     state: GaugeState
+// }
 
-impl FireAlarm {
-    pub fn new<T: ToString>(name: T) -> Self {
-        FireAlarm { 
-            name: name.to_string(),
-            state: GaugeState::Disabled,
-            updated: false
-        }
-    }
+// impl FireAlarm {
+//     pub fn new<T: ToString>(name: T) -> Self {
+//         FireAlarm { 
+//             name: name.to_string(),
+//             state: GaugeState::Disabled,
+//             updated: false
+//         }
+//     }
 
-}
+// }
 
-impl Gauge for FireAlarm {
+// impl Gauge for FireAlarm {
 
-    fn name(&self) -> &str {
-        &self.name
-    }
+//     fn name(&self) -> &str {
+//         &self.name
+//     }
 
-    fn state(&self) -> &GaugeState {
-        &self.state
-    }
+//     fn state(&self) -> &GaugeState {
+//         &self.state
+//     }
 
-    fn set_state(&mut self, state: GaugeState) {
-        self.state = state;
-        self.updated = true;
-    }
+//     fn set_state(&mut self, state: GaugeState) {
+//         self.state = state;
+//         self.updated = true;
+//     }
 
-    fn is_updated(&self) -> IsUpdated {
-        self.updated
-    }
+//     fn is_updated(&self) -> IsUpdated {
+//         self.updated
+//     }
 
-    fn set_is_updated(&mut self, is_updated: IsUpdated) {
-        self.updated = is_updated
-    }
-}
+//     fn set_is_updated(&mut self, is_updated: IsUpdated) {
+//         self.updated = is_updated
+//     }
+// }
 
 fn main() {
     let name = std::env::var("GAUGE_NAME")
@@ -50,9 +50,8 @@ fn main() {
     let server_adress= std::env::var("SERVER_ADRESS")
         .expect("SERVER_ADRESS variable not defined!");
 
-    let mut gauge: FireAlarm = FireAlarm::new(&name);
-
-    println!("Created fire alarm \"{}\"",&name);
+    let mut gauge: FireAlarm = FireAlarm::new(name,FireAlarmState::Disabled);
+    let mut updated = false;
 
     loop {
         // Управление датчиком
@@ -63,30 +62,32 @@ fn main() {
 
         match input.trim(){
             "P" | "p" => {
-                match gauge.state {
-                    GaugeState::Disabled => {
-                        gauge.set_state(GaugeState::Enabled);
+                match gauge.state() {
+                    FireAlarmState::Disabled => {
+                        gauge.set_state(FireAlarmState::Enabled);
+                        updated = true;
                         println!("Gauge enabled");
                     },
-                    GaugeState::Enabled => {                      
-                        gauge.set_state(GaugeState::Disabled);
+                    FireAlarmState::Enabled => {                      
+                        gauge.set_state(FireAlarmState::Disabled);
+                        updated = true;
                         println!("Gauge disabled");
                     },
-                    GaugeState::Message(_) => {
-                        gauge.set_state(GaugeState::Disabled);
+                    FireAlarmState::OnAlert => {
+                        gauge.set_state(FireAlarmState::Disabled);
+                        updated = true;
                         println!("Gauge disabled");
                     }
                 }
             },
             "F" | "f" => {
-                match gauge.state {
-                    GaugeState::Disabled => {
+                match gauge.state() {
+                    FireAlarmState::Disabled => {
                         println!("Gauge disabled")
                     },
-                    GaugeState::Enabled => {                      
-                        gauge.set_state(
-                            GaugeState::Message("Deteced fire!".to_string())
-                        );
+                    FireAlarmState::Enabled => {                      
+                        gauge.set_state(FireAlarmState::OnAlert);
+                        updated = true;
                         println!("Gague catched fire");
                     },
                     _ => ()
@@ -96,7 +97,7 @@ fn main() {
         } // Управление датчиком
 
         // Обработка состояний дадчика
-        if gauge.fetch_update() {
+        if updated {
             let mut stream = TcpStream::connect(server_adress.clone())
                 .expect(format!("Cant connect to listener on {}",server_adress).as_str());
 
@@ -107,7 +108,9 @@ fn main() {
                 Err(e) => {
                     eprintln!("{}",e)
                 },
-            }
+            };
+
+            updated = false;
         }// Обработка состояний дадчика
     }
 }

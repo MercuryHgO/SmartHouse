@@ -1,67 +1,20 @@
 use std::{time::{Duration, Instant}, thread, io::{Write,Read, self}, sync::{Arc, Mutex}, net::TcpStream};
 
+use gauge::types::{temperature_gauge::{TemperatureGauge, TemperatureGaugeState}, Gauge};
 
-use gauge::{GaugeState, Gauge, IsUpdated};
 const INTERVAL: Duration = Duration::from_secs(5);
 
-type Temperature = f32;
-
-struct TemperatureGauge {
-    name: String,
-    temperature: Temperature,
-    state: GaugeState,
-    updated: IsUpdated
-}
-
-impl TemperatureGauge {
-    pub fn new<T: ToString>(gauge_name: T, temperature: Temperature) -> Self {
-        TemperatureGauge { 
-            name: gauge_name.to_string(),
-            temperature,
-            state: GaugeState::Disabled,
-            updated: false
-        }
-    }
-
-    pub fn temperature(&self) -> Temperature {
-        self.temperature
-    }
-
-    pub fn set_temperature(&mut self, temperature: Temperature) {
-        self.temperature = (temperature * 10.0).round() / 10.0;
-        self.updated = true;
-    }
-
-}
-
-impl Gauge for TemperatureGauge {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn state(&self) -> &GaugeState {
-        &self.state
-    }
-
-    fn set_state(&mut self, state: GaugeState) {
-        self.state = state;
-        self.updated = true;
-    }
-
-    fn is_updated(&self) -> IsUpdated {
-        self.updated
-    }
-
-    fn set_is_updated(&mut self, is_updated: IsUpdated) {
-        self.updated = is_updated
-    }
-}
-
 fn main() {
+    let temperature = Arc::new(Mutex::new(36.6));
+    let temperature_clone = Arc::clone(&temperature);
+
     let temperature_gauge = 
         Arc::new(
             Mutex::new(
-                TemperatureGauge::new("Living room temperature", 36.0)
+                TemperatureGauge::new(
+                    "Living room".to_string(), 
+                    TemperatureGaugeState::Disabled
+                )
             )
         );
     let gauge_clone = Arc::clone(&temperature_gauge);
@@ -69,24 +22,21 @@ fn main() {
     thread::spawn(move || {
         let mut next_time = Instant::now() + INTERVAL;
 
-
         loop {
             let now = Instant::now();
 
             if next_time <= now {
                 let mut gauge = gauge_clone.lock().expect("Error locking mutex");
 
-                match gauge.state {
-                    GaugeState::Enabled | GaugeState::Message(_) => {
-                        let current_temperature = gauge.temperature();
-
+                match gauge.state() {
+                    TemperatureGaugeState::Enabled | TemperatureGaugeState::ReadedTemperarure(_) => {
                         gauge.set_state(
-                            GaugeState::Message(format!("Temperature updated: {} °C",current_temperature))
+                            TemperatureGaugeState::ReadedTemperarure(*temperature.lock().expect("Error locking mutex"))
                         );
 
                         send_gauge(&mut gauge);
 
-                        gauge.set_state(GaugeState::Enabled);
+                        gauge.set_state(TemperatureGaugeState::Enabled);
                     }
                     _ => ()
                 }
@@ -112,13 +62,13 @@ fn main() {
         match input.trim() {
             "P" | "p" => {
                 match gauge.state() {
-                    GaugeState::Disabled => {
-                        gauge.set_state(GaugeState::Enabled);
+                    TemperatureGaugeState::Disabled => {
+                        gauge.set_state(TemperatureGaugeState::Enabled);
                         println!("Gauge enabled");
                         send_gauge(&mut gauge);
                     },
-                    GaugeState::Enabled => {
-                        gauge.set_state(GaugeState::Disabled);
+                    TemperatureGaugeState::Enabled => {
+                        gauge.set_state(TemperatureGaugeState::Disabled);
                         println!("Gauge disabled");
                         send_gauge(&mut gauge);
                     },
@@ -127,29 +77,30 @@ fn main() {
             },
              "k"|"j"|"K"|"J" => {
                 match gauge.state() {
-                    GaugeState::Disabled => {
+                    TemperatureGaugeState::Disabled => {
                         println!("Gauge disabled");
                     },
                     _ => {
-                        let current_temperature = gauge.temperature();
-
+                        let mut temp = temperature_clone.lock().expect("Error locking mutex");
                         match input.trim() {
                             "k" => { 
-                                gauge.set_temperature(current_temperature + 0.1);
+                                *temp += 0.1;
                             }
                             "j" => { 
-                                gauge.set_temperature(current_temperature - 0.1);
+                                *temp -= 0.1;
                             }
                             "K" => { 
-                                gauge.set_temperature(current_temperature + 1.0);
+                                *temp += 1.0;
                             }
                             "J" => { 
-                                gauge.set_temperature(current_temperature - 1.0);
+                                *temp -= 1.0;
                             }
                              _ => ()
                         }
 
-                        println!("Set temperature: {}",gauge.temperature());
+                        *temp = (*temp * 10.0).round() / 10.0;
+
+                        println!("Set temperatupe: {}",*temp);
                     },
                 }
              }
@@ -162,12 +113,10 @@ fn main() {
 fn send_gauge(gauge: &mut TemperatureGauge) {
 
     let result = || -> Result<(),Box<dyn std::error::Error>> {
-        if gauge.fetch_update() {
-            let address = std::env::var("SERVER_ADRESS")
-                .map_err(|_e| "SERVER_ADRESS var not specified")?;
-            TcpStream::connect(address)?
-                .write(&gauge.serialize())?;
-        }
+        let address = std::env::var("SERVER_ADRESS")
+            .map_err(|_e| "SERVER_ADRESS var not specified")?;
+        TcpStream::connect(address)?
+            .write(&gauge.serialize())?;
 
         Ok(())
     }();
