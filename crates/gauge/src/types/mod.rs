@@ -1,13 +1,50 @@
+//! Модуль определяет основную архитектуру
+//! для датчиков и систем умного дома.
+//! 
+//! # Архитектура
+//!
+//! От датчика требуется три свойства:
+//! идентификатор, имя и состаяние.
+//!
+//! ## Идентификатор (Id)
+//!
+//! С помощью идентификатора определяется тип датчика,
+//! который сообщает о том, что из себя представляет датчик:
+//! пожарная сигнализация, температурный датчик и т.п.
+//! 
+//! Соответсвенно, зная идентификатор, можно определить,
+//! как правильно прочитать информацию о его состоянии.
+//!
+//! ## Имя (Name)
+//!
+//! Как датчик представляет себя пользователю.
+//!
+//! ## Состояние (State)
+//!
+//! Состояние датчика - это `enum` который реализует [`GaugeState`].
+//!
+//! Состояние датчика может передавать с собйо какое-либо сообщение,
+//! для этого необходимо определить логику для сериализиции [`Gauge::serialize_state`] и десериализации
+//! состояния [`GaugeState::parse_state`]
+//!
+//! ## Примеры 
+//! 
+//! [`fire_alarm`]
+//! [`temperature_gauge`]
+//! 
+
+
 pub mod fire_alarm;
 pub mod temperature_gauge;
 
-use std::fmt::Display;
+const END_OF_TRANSMISSION: char = '\x04';
+
+use std::{fmt::Display, collections::HashMap};
 
 use crate::Result;
 
 type GaugeIdentifier = Vec<u8>;
 type GaugeName = String;
-type SerializedGaugeBytes = Vec<u8>;
 
 pub trait GaugeState: std::fmt::Debug 
 where
@@ -16,35 +53,29 @@ where
     fn parse_state(state: SerializedState) -> Result<Self>;
 }
 
-/// ```usize```: Id length, ```Vec<u8>```: Id
-type SerializedGaugeId = (usize,Vec<u8>);
-/// ```usize```: Name length, ```Vec<u8>```: Name
-type SerializedGaugeName = (usize,Vec<u8>);
-/// ```u8```: Gauge state, 
-/// ```Option<(usize,Vec<u8>)>```: Message size and message itself, if presented
-type SerializedGaugeState = (u8,Option<(usize,Vec<u8>)>);
+type SerializedGaugeBytes = Vec<u8>;
 
-pub struct SerializedGauge {
-    bytes: SerializedGaugeBytes,
-    name_byte: usize,
-    state_byte: usize
-}
+/// Сериализованный счетчик
+pub struct SerializedGauge(SerializedGaugeBytes);
 
-impl SerializedGauge {
-    pub fn parse_id(&'static self) -> GaugeIdentifier {
-        self.bytes[1..1+self.bytes[0] as usize].to_vec()
-    }
-}
-
+/// Читает сериализованный счетчик в виде TCP сообщения,
+/// которое оканчивается символом [`END_OF_TRANSMISSION`]
 impl From<SerializedGaugeBytes> for SerializedGauge {
     fn from(value: SerializedGaugeBytes) -> Self {
-        let bytes = value.as_slice();
-        let name_byte = 1+value[0] as usize; // Also name size
-        let state_byte = 1+value[0]+1+value[name_byte];
-        
-        Self { bytes: bytes.to_vec(), name_byte, state_byte: state_byte as usize }
+        let bytes = value.split(|byte| 
+            { *byte as char == END_OF_TRANSMISSION }
+        )
+            .collect::<Vec<&[u8]>>()[0];
+
+        Self(bytes.to_vec())
     }
 }
+
+type SerializedGaugeId = Vec<u8>;
+type SerializedGaugeName = Vec<u8>;
+/// ```u8```: Статус счетчика, 
+/// ```Option<Vec<u8>>```: Сообщение от счетчика, если имеется
+type SerializedGaugeState = (u8,Option<Vec<u8>>);
 
 pub trait Gauge
 where
@@ -60,228 +91,169 @@ where
 
     fn name(&self) -> &GaugeName;
     fn set_name(&mut self, name: GaugeName);
+
     fn id() -> GaugeIdentifier;
 
     fn deserialize(gauge: SerializedGauge) -> crate::Result<Self> {
-        let deserialized_gauge = DeserializedGauge::parse(gauge)?;
+        let deserialized_gauge = DeserializedGauge::parse(gauge);
 
         Ok(Self::parse(deserialized_gauge)?)
     }
 
     fn parse(deserialized_gauge: DeserializedGauge) -> crate::Result<Self> {
-        let name = deserialized_gauge.name();
-        let state = Self::GaugeState::parse_state(deserialized_gauge.state().to_vec())?;
+        let name = deserialized_gauge.try_name()?;
+        let state = Self::GaugeState::parse_state(deserialized_gauge.try_state()?)?;
 
         Ok(Self::new( name, state))
     }
 
     // Serialization
-    
+
     fn serialize_id(&self) -> SerializedGaugeId;
     fn serialize_name(&self) -> SerializedGaugeName;
     fn serialize_state(&self) -> SerializedGaugeState;
 
+    /// Сериализует счетчик в вид `Ключ:Значение;Ключ:Значение`,
+    /// Для дальнейщей десериализации в Хэш Таблиц (см. [`DeserializedGauge`]).
     fn serialize(&self) -> SerializedGaugeBytes {
-        let id = self.serialize_id();
-        let name = self.serialize_name();
-        let serialized_state = self.serialize_state();
-        let state_message = match serialized_state.1 {
-            Some(message) => [&[message.0 as u8], message.1.as_slice()].concat(),
-            None => [].into(),
-        };
+        let id = Self::id();
+        let name = self.name().as_bytes().to_vec();
 
-        let bytes = [
-            &[id.0 as u8], id.1.as_slice(),
-            &[name.0 as u8], name.1.as_slice(),
-            &[serialized_state.0 as u8], &state_message
-        ].concat();
+        let raw_state = self.serialize_state();
+        let state = [
+            [raw_state.0].to_vec(),
+            match raw_state.1 {
+                Some(message) => message,
+                None => vec![],
+            }
+        ]
+            .concat();
 
-        bytes 
+        let mut map: HashMap<&str, Vec<u8>> = HashMap::new();
+        let mut serialized_slice = Vec::new();
+
+        map.insert("id", id);
+        map.insert("name", name);
+        map.insert("state", state);
+
+        println!("{:?}",&map);
+
+        for (key, value) in map {
+            serialized_slice.push([
+                key, 
+                &unsafe { String::from_utf8_unchecked(value) }
+            ].join(":"))
+        }
+
+        let mut serialized_string = serialized_slice.join(";");
+        serialized_string.push(END_OF_TRANSMISSION);
+       
+        println!("{:?}",serialized_string);
+
+        serialized_string.into_bytes()
     }
 
 }
 
 type SerializedState = Vec<u8>;
 
+/// Представляет собой десериализованный счетчик в виде
+/// хэш-таблицы с ключем `String` и значением `Vec<u8>`
 #[derive(Debug)]
-pub struct DeserializedGauge
-{
-    id: GaugeIdentifier,
-    name: String,
-    state: SerializedState,
-}
+pub struct DeserializedGauge(HashMap<String,Vec<u8>>);
 
 impl DeserializedGauge {
-    pub fn name(&self) -> GaugeName {
-        self.name.clone()
+    /// Читает имя из байтов
+    pub fn try_name(&self) -> Result<GaugeName>{
+        match self.0.get("name") {
+            Some(val) => Ok(String::from_utf8(val.clone())?),
+            None => Err(DeserializedGaugeError::NameNotFound)?,
+        }
     }
 
-    pub fn state(&self) -> SerializedState {
-        self.state.clone()
+    /// Читает состояние из байтов
+    pub fn try_state(&self) -> Result<SerializedState>{
+        match self.0.get("state") {
+            Some(val) => Ok(val.clone()),
+            None => Err(DeserializedGaugeError::StateNotFound)?,
+        }
     }
 
-    pub fn id(&self) -> GaugeIdentifier {
-        self.id.clone()
+    /// Читает идентификатор из байтов
+    pub fn try_id(&self) -> Result<GaugeIdentifier>{
+        match self.0.get("id") {
+            Some(val) => Ok(val.clone()),
+            None => Err(DeserializedGaugeError::IdNotFound)?,
+        }
     }
 
-    pub fn parse(gauge: SerializedGauge) -> Result<Self> {
-        let id = DeserializedGauge::parse_id(&gauge);
-        let name = DeserializedGauge::parse_name(&gauge)?;
-        let state = DeserializedGauge::get_state(&gauge);
+    pub fn parse(gauge: SerializedGauge) -> Self {
+        let bytes_as_string = unsafe { String::from_utf8_unchecked(gauge.0) };
 
-        Ok(Self { id, name, state })
+        println!("{:?}",bytes_as_string);
+        
+        let map: HashMap<String, Vec<u8>> = HashMap::from(
+            bytes_as_string.split(';')
+                .map(|val| {
+                    let key_value: Vec<&str> = val.split(':').collect();
+                    (key_value[0].to_string(),key_value[1].as_bytes().to_vec())
+                })
+                .collect::<HashMap<String,Vec<u8>>>()
+        );
+
+        println!("{:?}",map);
+
+        Self(map)
     }
 
-    fn parse_id(gauge: &SerializedGauge) -> GaugeIdentifier {
-        let id_length = gauge.bytes[0] as usize;
-        gauge.bytes[1..1+id_length].to_vec()
-    }
-
-    fn parse_name(gauge: &SerializedGauge) -> Result<GaugeName> {
-        let length = gauge.bytes[gauge.name_byte] as usize;
-        let slice = gauge.bytes[gauge.name_byte+1..gauge.name_byte+1+length].to_vec();
-
-        let name =  String::from_utf8(slice)?;
-
-        Ok(name)
-    }
-
-    fn get_state(gauge: &SerializedGauge) -> SerializedState {
-        gauge.bytes[gauge.state_byte..].to_vec()
-    }
 }
 
 impl Display for DeserializedGauge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let state_id = self.state[0];
-        let mut state_message: Option<String> = None;
+        let (state,state_message): (String,String) = match self.try_state() {
+            Ok(state) => {
+                let state_id = format!("{}",state[0]);
+                let state_message: String;
 
-        if self.state.len() > 1 {
-            let message = match String::from_utf8(self.state[2..].to_vec()) {
-                Ok(str) => str,
-                Err(_) => "<Malformed state message>".into(),
-            };
+                if state.len() > 1 {
+                    state_message = match String::from_utf8(state[1..].to_vec()) {
+                        Ok(str) => str,
+                        Err(_) => "<Malformed state message>".into(),
+                    };
+                } else {
+                    state_message = "None".to_string();
+                };
 
-            state_message = Some(message);
+                (state_id,state_message)
+            },
+            Err(_) => {
+                ("<Malformed state>".into(),"<Malformed state message>".into())
+            },
         };
+        let id_bytes = self.try_id().unwrap_or("<Malformed id>".into());
 
         write!(f,"Name: {},\nId: {},\nState: {},\nState message: {}",
-            self.name,
-            String::from_utf8(self.id.clone()).unwrap_or("<Malformed id>".to_string()),
-            state_id,
-            state_message.unwrap_or("None".to_string())
+            self.try_name().unwrap_or("<Malformed name>".into()),
+            String::from_utf8(id_bytes).unwrap_or("<Malformed id>".to_string()),
+            state,
+            state_message
         )
 
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::fmt::Display;
+#[derive(Debug)]
+enum DeserializedGaugeError {
+    NameNotFound,
+    IdNotFound,
+    StateNotFound
+}
 
-    use super::{GaugeName, GaugeState, Gauge};
-
-    const FIRE_ALARM_ID: &[u8] = "fire_alarm".as_bytes();
-
-    #[derive(Clone,Debug,PartialEq)]
-    enum FireAlarmState {
-        Enabled,
-        Disabled,
-        Message(String)
-    }
-
-    impl GaugeState for FireAlarmState {
-        fn parse_state(state: super::SerializedState) -> crate::Result<Self> {
-            let state = match state[0] as u8 {
-                0 => Self::Disabled,
-                1 => Self::Enabled,
-                2 => {
-                    let message_length = state[1] as usize;
-                    let message_slice = state[2..2+message_length].to_vec();
-                    let message = String::from_utf8(message_slice)?;
-                    Self::Message(message)
-                }
-                _ => Err("Fire alarm state parsing error")?
-            };
-
-            Ok(state)
-        }
-    }
-
-    #[derive(Debug,Clone,PartialEq)]
-    struct FireAlarm {
-        name: GaugeName,
-        state: FireAlarmState
-    }
- 
-    impl Display for FireAlarm {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            todo!()
-        }
-    }
-
-    impl Gauge for FireAlarm {
-        type GaugeState = FireAlarmState;
-
-        fn new(name: GaugeName, state: Self::GaugeState) -> Self {
-            Self { name, state }
-        }
-
-        fn serialize_id(&self) -> super::SerializedGaugeId {
-            (FIRE_ALARM_ID.len(),FIRE_ALARM_ID.to_vec())
-        }
-
-        fn serialize_name(&self) -> super::SerializedGaugeName {
-            let name = self.name.as_bytes().to_vec();
-            (name.len(),name)
-        }
-
-        fn serialize_state(&self) -> super::SerializedGaugeState {
-            match &self.state {
-                FireAlarmState::Enabled => (1,None),
-                FireAlarmState::Disabled => (0,None),
-                FireAlarmState::Message(message) => {
-                    let message_bytes = message.clone().into_bytes();
-                    let len = message_bytes.len();
-                    (2,Some((len,message_bytes)))
-                },
-            }
-        }
-
-        fn state(&self) -> &Self::GaugeState {
-            todo!()
-        }
-
-        fn name(&self) -> &GaugeName {
-            todo!()
-        }
-
-        fn id() -> super::GaugeIdentifier {
-            todo!()
-        }
-
-        fn set_state(&mut self, state: Self::GaugeState) {
-            todo!()
-        }
-
-        fn set_name(&mut self, name: GaugeName) {
-            todo!()
-        }
-
-    }
-
-    #[test]
-    fn serialize_and_deserialize() {
-        let fire_alarm = FireAlarm::new("Fire alarm".to_string(), FireAlarmState::Disabled);
-
-        let serialized = fire_alarm.serialize();
-
-        let deserialized = FireAlarm::deserialize(serialized.into()).expect("Error deserializing");
-
-        println!("fist: {:?}",fire_alarm);
-        println!("second: {:?}",deserialized);
-
-        assert_eq!(fire_alarm,deserialized)
-
+/// Выводит Debug
+impl Display for DeserializedGaugeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self)
     }
 }
+
+impl std::error::Error for DeserializedGaugeError {}

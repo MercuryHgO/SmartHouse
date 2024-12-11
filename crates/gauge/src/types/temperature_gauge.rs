@@ -6,7 +6,7 @@ pub const TEMPERATURE_GAUGE_ID: &[u8] = "temperature_gauge".as_bytes();
 
 type Temperature = f32;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TemperatureGaugeState {
     Disabled,
     Enabled,
@@ -19,7 +19,7 @@ impl GaugeState for TemperatureGaugeState {
             0 => TemperatureGaugeState::Disabled,
             1 => TemperatureGaugeState::Enabled,
             2 => {
-                let temp_as_bytes: [u8;4]  = state[2..6].try_into()?;
+                let temp_as_bytes: [u8;4]  = state[1..].try_into()?;
                 let temp = f32::from_be_bytes(temp_as_bytes);
                 TemperatureGaugeState::ReadedTemperarure(temp)
             },
@@ -30,7 +30,7 @@ impl GaugeState for TemperatureGaugeState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub struct TemperatureGauge {
     name: String,
     state: TemperatureGaugeState
@@ -64,11 +64,11 @@ impl Gauge for TemperatureGauge {
     }
 
     fn serialize_id(&self) -> super::SerializedGaugeId {
-        (TEMPERATURE_GAUGE_ID.len(),TEMPERATURE_GAUGE_ID.to_vec())
+        TEMPERATURE_GAUGE_ID.to_vec()
     }
 
     fn serialize_name(&self) -> super::SerializedGaugeName {
-        (self.name.len(),self.name.as_bytes().to_vec())
+        self.name.as_bytes().to_vec()
     }
 
     fn serialize_state(&self) -> super::SerializedGaugeState {
@@ -77,7 +77,7 @@ impl Gauge for TemperatureGauge {
             TemperatureGaugeState::Enabled =>  (1,None),
             TemperatureGaugeState::ReadedTemperarure(temp) => {
                 let temp_as_bytes = temp.to_be_bytes();
-                (2,Some((4 as usize,temp_as_bytes.to_vec())))
+                (2,Some(temp_as_bytes.to_vec()))
             },
         }
     }
@@ -96,5 +96,24 @@ impl Display for TemperatureGauge {
                 write!(f, "'{}' temperature: {}", self.name, temp)
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::types::Gauge;
+
+    use super::{TemperatureGauge, TemperatureGaugeState};
+
+    #[test]
+    fn serialize_and_deserialize() {
+        let temp = TemperatureGauge::new("Room".to_string(), TemperatureGaugeState::ReadedTemperarure(36.6));
+
+        let serialized = temp.serialize();
+
+        let deserialized = TemperatureGauge::deserialize(serialized.into())
+            .expect("Error deserializng");
+
+        assert_eq!(temp,deserialized)
     }
 }

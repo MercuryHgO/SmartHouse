@@ -4,7 +4,7 @@ use super::{GaugeName, GaugeState, Gauge};
 
 pub const FIRE_ALARM_ID: &[u8] = "fire_alarm".as_bytes();
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum FireAlarmState {
     Disabled,
     Enabled,
@@ -24,6 +24,7 @@ impl GaugeState for FireAlarmState {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct FireAlarm {
     name: GaugeName,
     state: FireAlarmState
@@ -50,11 +51,11 @@ impl Gauge for FireAlarm {
     }
 
     fn serialize_id(&self) -> super::SerializedGaugeId {
-        (FIRE_ALARM_ID.len(),FIRE_ALARM_ID.to_vec())
+        FIRE_ALARM_ID.to_vec()
     }
 
     fn serialize_name(&self) -> super::SerializedGaugeName {
-        (self.name.len(),self.name.clone().into())
+        self.name.clone().into()
     }
 
     fn serialize_state(&self) -> super::SerializedGaugeState {
@@ -85,5 +86,25 @@ impl Gauge for FireAlarm {
 
     fn set_name(&mut self, name: GaugeName) {
         self.name = name
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::types::Gauge;
+
+    use super::{FireAlarm, FireAlarmState};
+
+    #[test]
+    fn serialize_and_deserialize() {
+        let fire_alarm: FireAlarm = FireAlarm::new("Room".to_string(),FireAlarmState::Enabled);
+
+        let serialized = fire_alarm.serialize();
+
+        let deserialized = FireAlarm::deserialize(serialized.into())
+            .expect("Deserialization error");
+
+        assert_eq!(fire_alarm,deserialized)
+
     }
 }

@@ -34,12 +34,7 @@ fn handle_client(mut stream: TcpStream) {
             let recieved_gauge = SerializedGauge::from(buffer.to_vec());
             let deserialized_gauge = DeserializedGauge::parse(recieved_gauge);
             
-            match deserialized_gauge {
-                Ok(gauge) => {read_gauge(gauge)},
-                Err(e) => {
-                    eprintln!("Error decoding gauge: {e}")
-                },
-            }
+            read_gauge(deserialized_gauge);
 
             true
         },
