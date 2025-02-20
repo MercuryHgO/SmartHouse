@@ -1,67 +1,56 @@
-use self::dimensions::{Meters, Position};
+use dimensions::Position;
+
+use crate::types::{Gauge, GaugeState};
 
 pub mod dimensions;
+pub mod wall;
+pub mod room;
+pub mod floor;
+pub mod house;
 
-struct Door {
-    position_first: Position,
-    position_second: Position,
-}
 
-impl Door {
-    fn new(position_first: Position, position_second: Position) -> Self { Self { position_first, position_second } }
-}
+type Connection = Position;
+type RoomGauge = dyn Gauge<GaugeState = dyn GaugeState>;
 
-struct Wall {
-    position_first: Position,
-    position_second: Position,
 
-    connection_first: &Wall,
-    connection_second: &Wall,
+#[cfg(test)]
+mod tests {
+    use crate::house_layout::{wall::Wall, Connection};
 
-    doors: Option<Vec<Door>>
-}
+    #[test]
+    fn connect_walls() {
+        let connections: Vec<Connection> =  vec![
+            ( 0, 0).into(),
+            ( 0,10).into(),
+            (10,10).into(),
+            (10, 0).into(),
+        ];
 
-impl Wall {
-    fn new(
-        position_first: Position,
-        position_second: Position,
-        connection_first: &Wall,
-        connection_second: &Wall,
-        doors: Option<Vec<Door>>
-    ) -> Self { 
-        Self {
-            position_first,
-            position_second,
-            connection_first,
-            connection_second,
-            doors
-        }
+        let walls = Wall::from_connections(connections);
+
+   
+        // let mut walls = vec![
+        //     Wall::new(( 0, 0).into(), ( 0,10).into(), None),
+        //     Wall::new(( 0,10).into(), (10,10).into(), None),
+        //     Wall::new((10,10).into(), (10, 0).into(), None),
+        //     Wall::new((10, 0).into(), ( 0, 0).into(), None),
+        // ];
+
+        // Wall::connect_walls(&mut walls);
+
+        assert!(true)
     }
-}
 
-struct Room {
-    walls: Vec<Wall>,
-    hieght: Meters
-}
+    // #[test]
+    // fn create_house() {
+    //     let walls = 
 
-impl Room {
-    fn new(walls: Vec<Wall>, hieght: Meters) -> Self { Self { walls, hieght } }
+    //     let House = House::new(
+    //         Floor::new(
+    //             vec![
+                    
+    //             ]
+    //             ,1)
+    //     );
+    // }
 }
-
-struct Floor {
-    rooms: Vec<Room>,
-    number: u8
-}
-
-impl Floor {
-    fn new(rooms: Vec<Room>, number: u8) -> Self { Self { rooms, number } }
-}
-
-struct House {
-    floors: Vec<Floor>
-}
-
-impl House {
-    fn new(floors: Vec<Floor>) -> Self { Self { floors } }
-}
-

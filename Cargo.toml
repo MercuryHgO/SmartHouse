@@ -1,7 +1,7 @@
 [workspace]
-
+resolver = "2"
 members = [
   "crates/fire_alarm",
   "crates/server",
   "crates/gauge"
-, "crates/temperature_gauge"]
+, "crates/temperature_gauge", "crates/house_layout"]

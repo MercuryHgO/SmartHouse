@@ -47,10 +47,8 @@ type GaugeIdentifier = Vec<u8>;
 type GaugeName = String;
 
 pub trait GaugeState: std::fmt::Debug 
-where
-    Self: Sized
 {
-    fn parse_state(state: SerializedState) -> Result<Self>;
+    fn parse_state(state: SerializedState) -> Result<Self> where Self: Sized;
 }
 
 type SerializedGaugeBytes = Vec<u8>;
@@ -79,12 +77,12 @@ type SerializedGaugeState = (u8,Option<Vec<u8>>);
 
 pub trait Gauge
 where
-    Self: Sized + Display
+    Self: Display + std::fmt::Debug
 {
     // Deserialisation
     type GaugeState: GaugeState;
 
-    fn new(name: GaugeName, state: Self::GaugeState) -> Self;
+    fn new(name: GaugeName, state: Self::GaugeState) -> Self where Self: Sized;
 
     fn state(&self) -> &Self::GaugeState;
     fn set_state(&mut self, state: Self::GaugeState);
@@ -92,15 +90,15 @@ where
     fn name(&self) -> &GaugeName;
     fn set_name(&mut self, name: GaugeName);
 
-    fn id() -> GaugeIdentifier;
+    fn id() -> GaugeIdentifier where Self: Sized;
 
-    fn deserialize(gauge: SerializedGauge) -> crate::Result<Self> {
+    fn deserialize(gauge: SerializedGauge) -> crate::Result<Self> where Self: Sized {
         let deserialized_gauge = DeserializedGauge::parse(gauge);
 
         Ok(Self::parse(deserialized_gauge)?)
     }
 
-    fn parse(deserialized_gauge: DeserializedGauge) -> crate::Result<Self> {
+    fn parse(deserialized_gauge: DeserializedGauge) -> crate::Result<Self> where Self: Sized {
         let name = deserialized_gauge.try_name()?;
         let state = Self::GaugeState::parse_state(deserialized_gauge.try_state()?)?;
 
@@ -115,7 +113,7 @@ where
 
     /// Сериализует счетчик в вид `Ключ:Значение;Ключ:Значение`,
     /// Для дальнейщей десериализации в Хэш Таблиц (см. [`DeserializedGauge`]).
-    fn serialize(&self) -> SerializedGaugeBytes {
+    fn serialize(&self) -> SerializedGaugeBytes where Self: Sized {
         let id = Self::id();
         let name = self.name().as_bytes().to_vec();
 

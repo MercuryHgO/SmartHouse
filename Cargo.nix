@@ -8,6 +8,7 @@ args@{
     "gauge/default"
     "server/default"
     "temperature_gauge/default"
+    "house_layout/default"
   ],
   rustPackages,
   buildRustPackages,
@@ -27,7 +28,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "24db51e3a5587b4223900a5fb685c621f9d96145cba3b665475d76d6e1bfacfb";
+  nixifiedLockHash = "626a9df6f8e7ae645141b9c58eb05923a22a751ae375961f3f437fcff6a4a0e7";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -53,6 +54,7 @@ in
     gauge = rustPackages.unknown.gauge."0.1.0";
     server = rustPackages.unknown.server."0.1.0";
     temperature_gauge = rustPackages.unknown.temperature_gauge."0.1.0";
+    house_layout = rustPackages.unknown.house_layout."0.1.0";
   };
   "unknown".fire_alarm."0.1.0" = overridableMkRustCrate (profileName: rec {
     name = "fire_alarm";
@@ -69,6 +71,26 @@ in
     version = "0.1.0";
     registry = "unknown";
     src = fetchCrateLocal workspaceSrc;
+    dependencies = {
+      json_minimal = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".json_minimal."0.1.3" { inherit profileName; }).out;
+    };
+  });
+  
+  "unknown".house_layout."0.1.0" = overridableMkRustCrate (profileName: rec {
+    name = "house_layout";
+    version = "0.1.0";
+    registry = "unknown";
+    src = fetchCrateLocal workspaceSrc;
+    dependencies = {
+      gauge = (rustPackages."unknown".gauge."0.1.0" { inherit profileName; }).out;
+    };
+  });
+  
+  "registry+https://github.com/rust-lang/crates.io-index".json_minimal."0.1.3" = overridableMkRustCrate (profileName: rec {
+    name = "json_minimal";
+    version = "0.1.3";
+    registry = "registry+https://github.com/rust-lang/crates.io-index";
+    src = fetchCratesIo { inherit name version; sha256 = "5f23a154c7bbe06d65d084a909a7ba16981b514768c5b79ccf423dda1e4b4d8e"; };
   });
   
   "unknown".server."0.1.0" = overridableMkRustCrate (profileName: rec {
