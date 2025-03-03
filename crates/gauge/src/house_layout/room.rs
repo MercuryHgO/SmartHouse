@@ -1,4 +1,3 @@
-use std::rc::Rc;
 
 use super::{dimensions::Centimeters, wall::Wall, RoomGauge};
 
@@ -7,12 +6,11 @@ use super::{dimensions::Centimeters, wall::Wall, RoomGauge};
 pub struct Room {
     walls: Vec<Wall>,
     hieght: Centimeters,
-    gauges: Vec<Rc<RoomGauge>>
+    gauges: Vec<Box<RoomGauge>>
 }
 
-// TODO: Delete Rc
 impl Room {
-    pub fn new(walls: Vec<Wall>, hieght: Centimeters, gauges: Vec<Rc<RoomGauge>>) -> Self {
+    pub fn new(walls: Vec<Wall>, hieght: Centimeters, gauges: Vec<Box<RoomGauge>>) -> Self {
         Self { walls, hieght, gauges }
     }
 }

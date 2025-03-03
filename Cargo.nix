@@ -9,6 +9,7 @@ args@{
     "server/default"
     "temperature_gauge/default"
     "house_layout/default"
+    "http/default"
   ],
   rustPackages,
   buildRustPackages,
@@ -28,7 +29,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "626a9df6f8e7ae645141b9c58eb05923a22a751ae375961f3f437fcff6a4a0e7";
+  nixifiedLockHash = "ebd128970f83fc837934572c9d59e9b40392a8425fbde06644021c5968cbb83e";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -55,6 +56,7 @@ in
     server = rustPackages.unknown.server."0.1.0";
     temperature_gauge = rustPackages.unknown.temperature_gauge."0.1.0";
     house_layout = rustPackages.unknown.house_layout."0.1.0";
+    http = rustPackages.unknown.http."0.1.0";
   };
   "unknown".fire_alarm."0.1.0" = overridableMkRustCrate (profileName: rec {
     name = "fire_alarm";
@@ -84,6 +86,13 @@ in
     dependencies = {
       gauge = (rustPackages."unknown".gauge."0.1.0" { inherit profileName; }).out;
     };
+  });
+  
+  "unknown".http."0.1.0" = overridableMkRustCrate (profileName: rec {
+    name = "http";
+    version = "0.1.0";
+    registry = "unknown";
+    src = fetchCrateLocal workspaceSrc;
   });
   
   "registry+https://github.com/rust-lang/crates.io-index".json_minimal."0.1.3" = overridableMkRustCrate (profileName: rec {

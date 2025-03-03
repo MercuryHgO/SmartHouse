@@ -39,16 +39,20 @@ pub mod temperature_gauge;
 
 const END_OF_TRANSMISSION: char = '\x04';
 
-use std::{fmt::Display, collections::HashMap};
-
+use std::{collections::HashMap, fmt::{Debug, Display}};
+use json_minimal::Json;
 use crate::Result;
 
 type GaugeIdentifier = Vec<u8>;
 type GaugeName = String;
 
-pub trait GaugeState: std::fmt::Debug 
+pub trait GaugeState: Debug + Display
 {
     fn parse_state(state: SerializedState) -> Result<Self> where Self: Sized;
+
+    fn json(&self) -> Json {
+        Json::STRING(self.to_string())
+    }
 }
 
 type SerializedGaugeBytes = Vec<u8>;
@@ -151,6 +155,27 @@ where
         serialized_string.into_bytes()
     }
 
+    /// Сериализует счетчик в Json
+    fn json(&self) -> Json where Self: Sized {
+        let id = Box::new(
+            Json::STRING(
+                String::from_utf8(Self::id())
+                    .unwrap_or_else(|_| "<Malformed id>".to_string())
+            )
+        );
+        let name = Box::new(
+            Json::STRING(
+                self.name().clone()
+            )
+        );
+        let state = Box::new(self.state().json());
+
+        Json::JSON(vec![
+            Json::OBJECT { name: "id".to_string(), value: id },
+            Json::OBJECT { name: "name".to_string(), value: name },
+            Json::OBJECT { name: "state".to_string(), value: state },
+        ])
+    }
 }
 
 type SerializedState = Vec<u8>;

@@ -1,37 +1,46 @@
-use std::fmt::Display;
+use std::net::{TcpListener, TcpStream};
+use std::io::{prelude::*, BufReader};
 
 use gauge::house_layout::house::House;
+use http::{HttpRequest, HttpRequestBuilder, HttpResponceBuilder};
 
-enum Response {
-    OK,
-    BAD_REQUEST,
-    NOT_FOUND,
-    SERVER_ERROR
-}
-
-impl Display for Response {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let http_version = "HTTP/1.1";
-
-        match self {
-            Response::OK           => write!(f,"{} 200 OK\r\n\r\n", http_version),
-            Response::BAD_REQUEST  => write!(f,"{} 400 Bad Request\r\n\r\n", http_version),
-            Response::NOT_FOUND    => write!(f,"{} 404 Not found\r\n\r\n", http_version),
-            Response::SERVER_ERROR => write!(f,"{} 500 Internal Server Error\r\n\r\n", http_version),
-        }
-    }
-}
 
 struct AppState {
     house: House,
 }
 
+fn handle_stream(mut stream: TcpStream) {
+
+    let request: Result<HttpRequest,_> = (&stream)
+        .try_into()
+    ;
+
+    match request {
+        Ok(_) => {
+            let responce =
+                HttpResponceBuilder::default()
+                    .content(&"It works!")
+                    .build();
+            stream.write_all(&responce.serialize().as_bytes()).unwrap();
+        },
+        Err(e) => {
+            let responce =
+                HttpResponceBuilder::default()
+                    .status(http::Status::BadRequest)
+                    .content(&format!("{:?}",e))
+                    .build();
+            stream.write_all(&responce.serialize().as_bytes()).unwrap();
+        },
+    }
+
+}
+
 fn main() {
-    let mut app = AppState {
-        house: House::default()
+
+    let listener = TcpListener::bind("127.0.0.1:9000")
+        .expect("Error binding TCP stream");
+   
+    for stream in listener.incoming() {
+        handle_stream(stream.unwrap());
     };
-
-
-
-    
 }

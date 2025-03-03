@@ -47,7 +47,7 @@
             # tmux split-window -h -t smarthouse-project-shell
             # tmux resize-pane -t smarthouse-project-shell:0.1 -x 20%
 
-            tmux send-keys -t smarthouse-project-shell:0.0 'bash' C-m 'hx' C-m
+            tmux send-keys -t smarthouse-project-shell:0.0 'hx' C-m
 
             # Docker-compose window
             tmux new-window -t smarthouse-project-shell

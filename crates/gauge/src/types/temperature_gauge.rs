@@ -13,6 +13,18 @@ pub enum TemperatureGaugeState {
     ReadedTemperarure(Temperature)
 }
 
+impl Display for TemperatureGaugeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            TemperatureGaugeState::Disabled => "Disabled".to_string(),
+            TemperatureGaugeState::Enabled => "Enabled".to_string(),
+            TemperatureGaugeState::ReadedTemperarure(t) => format!("Readed temperature: {}",t),
+        };
+
+        write!(f,"{}",message)
+    }
+}
+
 impl GaugeState for TemperatureGaugeState {
     fn parse_state(state: super::SerializedState) -> crate::Result<Self> {
         let state = match state[0] {

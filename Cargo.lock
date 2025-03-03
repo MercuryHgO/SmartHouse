@@ -21,7 +21,12 @@ name = "house_layout"
 version = "0.1.0"
 dependencies = [
  "gauge",
+ "http",
 ]
+
+[[package]]
+name = "http"
+version = "0.1.0"
 
 [[package]]
 name = "json_minimal"

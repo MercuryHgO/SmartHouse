@@ -11,6 +11,18 @@ pub enum FireAlarmState {
     OnAlert
 }
 
+impl Display for FireAlarmState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            FireAlarmState::Disabled => "Disabled",
+            FireAlarmState::Enabled => "Enabled",
+            FireAlarmState::OnAlert => "On alert",
+        };
+
+        write!(f,"{}",message)
+    }
+}
+
 impl GaugeState for FireAlarmState {
     fn parse_state(state: super::SerializedState) -> crate::Result<Self> {
         let state = match state[0] {

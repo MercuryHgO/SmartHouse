@@ -12,7 +12,6 @@ pub mod house;
 type Connection = Position;
 type RoomGauge = dyn Gauge<GaugeState = dyn GaugeState>;
 
-
 #[cfg(test)]
 mod tests {
     use crate::house_layout::{wall::Wall, Connection};

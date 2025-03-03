@@ -4,4 +4,4 @@ members = [
   "crates/fire_alarm",
   "crates/server",
   "crates/gauge"
-, "crates/temperature_gauge", "crates/house_layout"]
+, "crates/temperature_gauge", "crates/house_layout", "crates/http"]
