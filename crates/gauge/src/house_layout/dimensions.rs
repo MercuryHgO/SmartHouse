@@ -2,6 +2,8 @@ use std::ops::{AddAssign, SubAssign};
 
 use json_minimal::Json;
 
+use crate::helpers::json_check_object;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Default,Clone, Copy)]
 pub struct Centimeters(u16);
 
@@ -39,6 +41,12 @@ impl From<u16> for Centimeters {
     }
 }
 
+impl From<f64> for Centimeters {
+    fn from(value: f64) -> Self {
+        Self(value as u16)
+    }
+}
+
 impl Into<Json> for Centimeters {
     fn into(self) -> Json {
         Json::NUMBER(self.0.into())
@@ -64,6 +72,34 @@ impl Into<Json> for Position {
             Json::OBJECT { name: "x".to_string(), value: Box::new(self.x.into()) },
             Json::OBJECT { name: "y".to_string(), value: Box::new(self.y.into()) }
         ])
+    }
+}
+
+impl TryFrom<&Json> for Position {
+    type Error = crate::Error;
+
+    fn try_from(value: &Json) -> Result<Self, Self::Error> {
+        const POSITIONS_REQUIRED: &str = "both x and y position requied";
+        const NOT_A_NUMBER: &str = "coordinate must be a number";
+
+        let value = json_check_object(value)?;
+
+        let x = value.get("x")
+            .ok_or(POSITIONS_REQUIRED)?;
+        let y = value.get("y")
+            .ok_or(POSITIONS_REQUIRED)?;
+
+        let x: Centimeters = match json_check_object(x)? {
+            Json::NUMBER(n) => (*n).into(),
+            _ => Err(NOT_A_NUMBER)?
+        };
+
+        let y: Centimeters = match json_check_object(y)? {
+            Json::NUMBER(n) => (*n).into(),
+            _ => Err(NOT_A_NUMBER)?
+        };
+
+        Ok( Self { x, y } )
     }
 }
 

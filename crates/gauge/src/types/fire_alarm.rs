@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::{GaugeName, GaugeState, Gauge};
+use super::{Gauge, GaugeName, GaugeState};
 
 pub const FIRE_ALARM_ID: &[u8] = "fire_alarm".as_bytes();
 
@@ -55,6 +55,12 @@ impl Display for FireAlarm {
     }
 }
 
+// impl Into<GaugeJson> for FireAlarm {
+//     fn into(self) -> GaugeJson {
+//         todo!()
+//     }
+// }
+
 impl Gauge for FireAlarm {
     type GaugeState = FireAlarmState;
 
@@ -88,7 +94,7 @@ impl Gauge for FireAlarm {
         &self.name
     }
 
-    fn id() -> super::GaugeIdentifier {
+    fn id(&self) -> super::GaugeIdentifier {
         FIRE_ALARM_ID.to_vec()
     }
 

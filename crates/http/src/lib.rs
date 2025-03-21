@@ -1,7 +1,7 @@
 // TODO: no .clone()
 use std::{collections::HashMap, fmt::Display, io::{BufRead, BufReader, Lines}, net::TcpStream, ops::Not};
 
-type Result<T> = std::result::Result<T,crate::Error>;
+pub type Result<T> = std::result::Result<T,crate::Error>;
 
 const HTTP_VERSION: &str = "HTTP/1.1";
 const SEPARATOR: &str = "\r\n";
@@ -12,7 +12,8 @@ pub enum Status {
     Created,
     InternalServerError,
     BadRequest,
-    NotFound
+    NotFound,
+    MethodNotAllowed
 }
 
 impl TryFrom<&str> for Status {
@@ -25,6 +26,7 @@ impl TryFrom<&str> for Status {
             "500" => Ok(Status::InternalServerError),
             "400" => Ok(Status::BadRequest),
             "404" => Ok(Status::NotFound),
+            "405" => Ok(Status::MethodNotAllowed),
             _ => Err(Error::UnknownStatus)
         }
     }
@@ -38,14 +40,15 @@ impl Display for Status {
             Status::InternalServerError => "500 Internal Server Error",
             Status::BadRequest => "400 Bad Request",
             Status::NotFound => "404 Not Found",
+            Status::MethodNotAllowed => "405 Method Not Allowed",
         };
 
         write!(f,"{message}")
     }
 }
 
-type Headers = HashMap<String,String>;
-type Content = Option<String>;
+pub type Headers = HashMap<String,String>;
+pub type Content = Option<String>;
 
 #[derive(Debug)]
 pub struct HttpResponceBuilder {
@@ -326,10 +329,10 @@ impl HttpRequest {
         )
     }
 
-    const fn method(&self) -> &Method { &self.method }
-    const fn path(&self) -> &RequestTarget { &self.path }
-    const fn headers(&self) -> &Headers { &self.headers }
-    const fn content(&self) -> &Content { &self.content }
+    pub const fn method(&self) -> &Method { &self.method }
+    pub const fn path(&self) -> &RequestTarget { &self.path }
+    pub const fn headers(&self) -> &Headers { &self.headers }
+    pub const fn content(&self) -> &Content { &self.content }
 }
 
 impl TryFrom<&TcpStream> for HttpRequest {
@@ -354,8 +357,7 @@ impl TryFrom<&TcpStream> for HttpRequest {
 
 }
 
-// TODO: expand
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug )]
 pub enum Error {
     MalformedResponce,
     MalformedStatusLine,
@@ -365,7 +367,10 @@ pub enum Error {
     UnknownRequestMethod,
 
     UnsopportedProtocol,
-    MalformedHeader
+    MalformedHeader,
+
+    ResponceError(HttpResponce),
+    InternalServerError(Box<dyn std::error::Error>)
 }
 
 impl Display for Error {
@@ -375,9 +380,15 @@ impl Display for Error {
             Error::MalformedStatusLine => "Error during parsing status code",
             Error::UnknownStatus => "Unknown status",
             Error::MalformedHeader => "Error during parsing header",
-            Error::MalformedRequest => todo!(),
-            Error::UnknownRequestMethod => todo!(),
-            Error::UnsopportedProtocol => todo!(),
+            Error::MalformedRequest => "Error during parsing request",
+            Error::UnknownRequestMethod => "Unknown request method",
+            Error::UnsopportedProtocol => "Unsopported HTTP protocol",
+            Error::InternalServerError(e) => {
+                let message = format!("Internal server error: {}",e);
+
+                Box::leak(message.into_boxed_str())
+            },
+            Error::ResponceError(_) => "Error made into responce",
         };
 
         write!(f,"{message}")
@@ -387,118 +398,4 @@ impl Display for Error {
 impl std::error::Error for Error { }
 
 #[cfg(test)]
-mod tests {
-    use crate::{Error, HttpRequest, HttpRequestBuilder, HttpResponce, HttpResponceBuilder};
-
-    impl PartialEq for HttpResponce {
-        fn eq(&self, other: &Self) -> bool {
-            self.status as usize == other.status as usize &&
-            self.headers == other.headers &&
-            self.content == other.content
-        }
-    }
-
-    impl PartialEq for HttpRequest {
-        fn eq(&self, other: &Self) -> bool {
-            self.method as usize == other.method as usize &&
-            self.path == other.path &&
-            self.headers == other.headers &&
-            self.content == other.content
-        }
-    }
-
-    #[test]
-    fn responce_serialize() {
-        let resp = HttpResponceBuilder::default()
-            .content(&"Boba boba aboba")
-            .build()
-            .serialize();
-
-        let expected = "HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\nBoba boba aboba".to_string();
-        
-        assert_eq!(resp,expected);
-    }
-
-    #[test]
-    fn responce_parse() {
-        let resp = "HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\nBoba boba aboba".to_string();
-        
-        let expected = HttpResponceBuilder::default()
-            .content(&"Boba boba aboba")
-            .build();
-
-        let parsed = HttpResponce::parse(resp).unwrap();
-
-        assert_eq!(expected,parsed);
-    }
-    
-    #[test]
-    fn responce_must_be_invalid() {
-        let resp = "HTTP 200 OK\r\nContent-Length: 15\r\n\r\nBoba boba aboba".to_string();
-        assert!(HttpResponce::parse(resp).is_err());
-
-        let resp = "200 OK\r\nContent-Length: 15\r\n\r\nBoba boba aboba".to_string();
-        assert!(HttpResponce::parse(resp).is_err());
-
-        let resp = "HTTP/1.1 200 OK\r\nContent-Length: 15\r\nBoba boba aboba".to_string();
-        assert!(HttpResponce::parse(resp).is_err());
-
-        let resp = "HTTP/1.1 200 OK\r\nContent-Length 15\r\n\r\nBoba boba aboba".to_string();
-        assert!(HttpResponce::parse(resp).is_err());
-    }
-
-    #[test]
-    fn request_serialize() {
-        let resp = HttpRequestBuilder::new()
-            .build()
-            .serialize();
-
-        let expected = "GET / HTTP/1.1\r\n\r\n".to_string();
-        
-        assert_eq!(resp,expected);
-
-        let resp = HttpRequestBuilder::new()
-            .method(crate::Method::POST)
-            .content(&"Aboba")
-            .path(&"/aboba")
-            .build()
-            .serialize();
-
-        let expected = "POST /aboba HTTP/1.1\r\nContent-Length: 5\r\n\r\nAboba".to_string();
-        
-        assert_eq!(resp,expected);
-    }
-
-    #[test]
-    fn request_parse() {
-        let resp = "GET / HTTP/1.1\r\n\r\n".to_string();
-        let resp = HttpRequest::parse(
-            resp
-                .lines()
-                .map(|s| s
-                .to_string())
-                .collect()
-        ).unwrap();
-
-        let expected = HttpRequestBuilder::new().build();
-
-        assert_eq!(resp,expected);
-
-        let resp = "POST /aboba HTTP/1.1\r\nContent-Length: 5\r\n\r\n".to_string();
-        let resp = HttpRequest::parse(
-            resp
-            .lines()
-            .map(|s| s.to_string())
-            .collect()
-        ).unwrap();
-
-        let expected = HttpRequestBuilder::new()
-            .method(crate::Method::POST)
-            .header("Content-Length".to_string(), "5".to_string())
-            .path(&"/aboba")
-            .build()
-        ;
-        
-        assert_eq!(resp,expected);
-    }
-}
+mod tests;

@@ -39,7 +39,7 @@ pub mod temperature_gauge;
 
 const END_OF_TRANSMISSION: char = '\x04';
 
-use std::{collections::HashMap, fmt::{Debug, Display}};
+use std::{borrow::Borrow, collections::HashMap, fmt::{Debug, Display}, ops::Deref};
 use json_minimal::Json;
 use crate::Result;
 
@@ -73,6 +73,7 @@ impl From<SerializedGaugeBytes> for SerializedGauge {
     }
 }
 
+
 type SerializedGaugeId = Vec<u8>;
 type SerializedGaugeName = Vec<u8>;
 /// ```u8```: Статус счетчика, 
@@ -94,7 +95,7 @@ where
     fn name(&self) -> &GaugeName;
     fn set_name(&mut self, name: GaugeName);
 
-    fn id() -> GaugeIdentifier where Self: Sized;
+    fn id(&self) -> GaugeIdentifier;
 
     fn deserialize(gauge: SerializedGauge) -> crate::Result<Self> where Self: Sized {
         let deserialized_gauge = DeserializedGauge::parse(gauge);
@@ -118,7 +119,7 @@ where
     /// Сериализует счетчик в вид `Ключ:Значение;Ключ:Значение`,
     /// Для дальнейщей десериализации в Хэш Таблиц (см. [`DeserializedGauge`]).
     fn serialize(&self) -> SerializedGaugeBytes where Self: Sized {
-        let id = Self::id();
+        let id = self.id();
         let name = self.name().as_bytes().to_vec();
 
         let raw_state = self.serialize_state();
@@ -153,28 +154,6 @@ where
         println!("{:?}",serialized_string);
 
         serialized_string.into_bytes()
-    }
-
-    /// Сериализует счетчик в Json
-    fn json(&self) -> Json where Self: Sized {
-        let id = Box::new(
-            Json::STRING(
-                String::from_utf8(Self::id())
-                    .unwrap_or_else(|_| "<Malformed id>".to_string())
-            )
-        );
-        let name = Box::new(
-            Json::STRING(
-                self.name().clone()
-            )
-        );
-        let state = Box::new(self.state().json());
-
-        Json::JSON(vec![
-            Json::OBJECT { name: "id".to_string(), value: id },
-            Json::OBJECT { name: "name".to_string(), value: name },
-            Json::OBJECT { name: "state".to_string(), value: state },
-        ])
     }
 }
 
@@ -262,6 +241,85 @@ impl Display for DeserializedGauge {
             state_message
         )
 
+    }
+}
+
+#[derive(Debug)]
+pub struct GaugeJson(Json);
+
+impl Clone for GaugeJson {
+    fn clone(&self) -> Self {
+        let slice = self.0.print().as_bytes().to_vec();
+
+        Self(
+            Json::parse(&slice)
+                .expect("Error parsing Json")
+        )
+    }
+}
+
+impl GaugeJson {
+    pub fn new(
+        id: &[u8],
+        name: &str,
+        state: &dyn GaugeState
+    ) -> Self {
+        Self(
+            Json::JSON(vec![
+                Json::OBJECT {
+                    name: "id".to_string(),
+                    value: Box::new(
+                        Json::STRING(String::from_utf8_lossy(&id).to_string())
+                    )
+                },
+                Json::OBJECT {
+                    name: "name".to_string(),
+                    value: Box::new(
+                        Json::STRING(name.to_string())
+                    )
+                },
+                Json::OBJECT {
+                    name: "state".to_string(),
+                    value: Box::new(
+                        state.json()
+                    )
+                },
+            ])
+        )
+    }
+
+    pub fn json(self) -> Json {
+        self.0
+    }
+}
+
+impl TryFrom<&Json> for GaugeJson {
+    type Error = crate::Error;
+
+    fn try_from(value: &Json) -> std::result::Result<Self, Self::Error> {
+        const MALFORMED_JSON: &str = "Malformed json";
+
+        let check_field =
+        |val: &str| -> crate::Result<()> {
+            match
+                value.get(val)
+                    .ok_or([val, "field required"].join(" "))?
+                {
+                    Json::OBJECT { value, .. } => {
+                        match value.unbox() {
+                            Json::STRING(_) => Ok(()),
+                            _ => Err([val, "expected to be a string"].join(" "))?
+                        }
+                    },
+                     _ => Err(MALFORMED_JSON)?
+                }
+        };
+
+        for val in ["id", "name", "gauge"] {
+            check_field(val)?
+        }
+
+        Ok(Self(*value))
     }
 }
 

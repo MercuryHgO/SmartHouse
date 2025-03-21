@@ -1,16 +1,12 @@
 use dimensions::Position;
 
-use crate::types::{Gauge, GaugeState};
-
 pub mod dimensions;
 pub mod wall;
 pub mod room;
 pub mod floor;
 pub mod house;
 
-
 type Connection = Position;
-type RoomGauge = dyn Gauge<GaugeState = dyn GaugeState>;
 
 #[cfg(test)]
 mod tests {

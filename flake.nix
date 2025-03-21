@@ -3,8 +3,10 @@
     cargo2nix.url = "github:cargo2nix/cargo2nix/release-0.11.0";
     flake-utils.follows = "cargo2nix/flake-utils";
     nixpkgs = {
-        # follows = "cargo2nix/nixpkgs";
-        url = "github:NixOS/nixpkgs/release-24.11";
+      url = "github:NixOS/nixpkgs/release-24.11";
+    };
+    oldpkgs = {
+      url = "github:NixOS/nixpkgs/release-22.11";
     };
   };
 
@@ -15,6 +17,10 @@
           inherit system;
           overlays = [cargo2nix.overlays.default];
         };
+
+        insomnia = (import oldpkgs {
+          inherit system;
+        }).insomnia;
 
         rustPkgs = pkgs.rustBuilder.makePackageSet {
           rustVersion  = "1.75.0";
@@ -31,7 +37,6 @@
 
       in rec {
         packages = {
-          # replace hello-world with your package name
           fire_alarm        = (rustPkgs.workspace.fire_alarm {});
           server            = (rustPkgs.workspace.server {});
           temperature_gauge = (rustPkgs.workspace.temperature_gauge {});
@@ -39,7 +44,7 @@
         };
 
         devShell = (rustPkgs.workspaceShell {
-          packages = with pkgs; [ gdb rust-analyzer  lldb ];
+          packages = with pkgs; [insomnia gdb rust-analyzer  lldb ];
           shellHook = ''
             tmux new-session -d -t smarthouse-project-shell
 

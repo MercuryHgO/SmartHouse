@@ -71,7 +71,7 @@ impl Gauge for TemperatureGauge {
         self.name = name
     }
 
-    fn id() -> GaugeIdentifier {
+    fn id(&self) -> GaugeIdentifier {
         TEMPERATURE_GAUGE_ID.to_vec()
     }
 

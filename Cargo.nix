@@ -6,6 +6,7 @@ args@{
   rootFeatures ? [
     "fire_alarm/default"
     "gauge/default"
+    "json_minimal/default"
     "server/default"
     "temperature_gauge/default"
     "house_layout/default"
@@ -29,7 +30,7 @@ args@{
   ignoreLockHash,
 }:
 let
-  nixifiedLockHash = "ebd128970f83fc837934572c9d59e9b40392a8425fbde06644021c5968cbb83e";
+  nixifiedLockHash = "ac69b34a00655f626f4966c68a0d1db970aaa300a7460d74962d7622997c29d0";
   workspaceSrc = if args.workspaceSrc == null then ./. else args.workspaceSrc;
   currentLockHash = builtins.hashFile "sha256" (workspaceSrc + /Cargo.lock);
   lockHashIgnored = if ignoreLockHash
@@ -53,6 +54,7 @@ in
   workspace = {
     fire_alarm = rustPackages.unknown.fire_alarm."0.1.0";
     gauge = rustPackages.unknown.gauge."0.1.0";
+    json_minimal = rustPackages.unknown.json_minimal."0.1.3";
     server = rustPackages.unknown.server."0.1.0";
     temperature_gauge = rustPackages.unknown.temperature_gauge."0.1.0";
     house_layout = rustPackages.unknown.house_layout."0.1.0";
@@ -74,7 +76,7 @@ in
     registry = "unknown";
     src = fetchCrateLocal workspaceSrc;
     dependencies = {
-      json_minimal = (rustPackages."registry+https://github.com/rust-lang/crates.io-index".json_minimal."0.1.3" { inherit profileName; }).out;
+      json_minimal = (rustPackages."unknown".json_minimal."0.1.3" { inherit profileName; }).out;
     };
   });
   
@@ -85,6 +87,8 @@ in
     src = fetchCrateLocal workspaceSrc;
     dependencies = {
       gauge = (rustPackages."unknown".gauge."0.1.0" { inherit profileName; }).out;
+      http = (rustPackages."unknown".http."0.1.0" { inherit profileName; }).out;
+      json_minimal = (rustPackages."unknown".json_minimal."0.1.3" { inherit profileName; }).out;
     };
   });
   
@@ -95,11 +99,11 @@ in
     src = fetchCrateLocal workspaceSrc;
   });
   
-  "registry+https://github.com/rust-lang/crates.io-index".json_minimal."0.1.3" = overridableMkRustCrate (profileName: rec {
+  "unknown".json_minimal."0.1.3" = overridableMkRustCrate (profileName: rec {
     name = "json_minimal";
     version = "0.1.3";
-    registry = "registry+https://github.com/rust-lang/crates.io-index";
-    src = fetchCratesIo { inherit name version; sha256 = "5f23a154c7bbe06d65d084a909a7ba16981b514768c5b79ccf423dda1e4b4d8e"; };
+    registry = "unknown";
+    src = fetchCrateLocal workspaceSrc;
   });
   
   "unknown".server."0.1.0" = overridableMkRustCrate (profileName: rec {

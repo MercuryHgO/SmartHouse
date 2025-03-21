@@ -3,5 +3,9 @@ resolver = "2"
 members = [
   "crates/fire_alarm",
   "crates/server",
-  "crates/gauge"
-, "crates/temperature_gauge", "crates/house_layout", "crates/http"]
+  "crates/gauge",
+  "crates/temperature_gauge",
+  "crates/house_layout",
+  "crates/http",
+  "crates/json_minimal-rust",
+  ]

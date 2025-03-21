@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 gauge = { version = "0.1.0", path = "../gauge" }
 http = { version = "0.1.0", path = "../http"}
+json_minimal = { vesion = "0.1.3", path = "../json_minimal-rust" }
